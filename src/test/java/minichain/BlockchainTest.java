@@ -39,6 +39,13 @@ class BlockchainTest {
     }
 
     @Test
+    void newPersonHasZeroBalance() {
+        Blockchain chain = new Blockchain(2);
+
+        assertEquals(0, chain.balanceOf("ravi"));
+    }
+
+    @Test
     void paymentsMoveCoins() {
         Blockchain chain = new Blockchain(2);
         chain.minePending("asha");
