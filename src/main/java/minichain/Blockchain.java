@@ -48,6 +48,9 @@ public class Blockchain implements Serializable {
         if (tx.from().equals(tx.to())) {
             throw new IllegalArgumentException("You can't pay yourself.");
         }
+        if (tx.amount() <= 0) {
+            throw new IllegalArgumentException("Payment amount must be greater than zero.");
+        }
         if (balanceOf(tx.from()) < tx.amount()) {
             throw new IllegalArgumentException(tx.from() + " doesn't have enough coins.");
         }

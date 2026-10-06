@@ -59,6 +59,20 @@ class BlockchainTest {
     }
 
     @Test
+    void cannotMakeNegativePayment() {
+        Blockchain chain = new Blockchain(2);
+        chain.minePending("asha");
+        KeyPair ashaWallet = getWallet();
+
+        assertThrows(IllegalArgumentException.class, () ->
+            chain.addTransaction(
+                Transaction.create("asha", "ravi", -10,
+                    ashaWallet.getPrivate(), ashaWallet.getPublic())
+            )
+        );
+    }
+
+    @Test
     void cannotPayYourself() {
         Blockchain chain = new Blockchain(2);
         chain.minePending("asha");
