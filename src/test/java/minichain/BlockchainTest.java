@@ -238,4 +238,24 @@ class BlockchainTest {
             chain.addTransaction(Transaction.create("asha", "ravi", 10, hackerWallet.getPrivate(), hackerWallet.getPublic()))
         );
     }
+
+    @Test
+    void signatureCannotBeReusedWithShiftedFields() {
+        Blockchain chain = new Blockchain(2);
+        chain.minePending("asha");
+
+        KeyPair ashaWallet = getWallet();
+        Transaction signed = Transaction.create("asha", "ravi", 120, ashaWallet.getPrivate(), ashaWallet.getPublic());
+
+        // Same id, key and signature, but a digit moved from the amount into the payee name
+        Transaction payeeShifted = new Transaction(signed.id(), "asha", "ravi1", 20, signed.senderKey(), signed.signature());
+        assertFalse(payeeShifted.hasValidSignature());
+        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(payeeShifted));
+
+        // Same signature, but a letter moved from the payee name into the sender name
+        Transaction senderShifted = new Transaction(signed.id(), "ashar", "avi", 120, signed.senderKey(), signed.signature());
+        assertFalse(senderShifted.hasValidSignature());
+
+        assertTrue(signed.hasValidSignature());
+    }
 }
