@@ -4,8 +4,10 @@ import java.io.Serializable;
 import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 // bump version only for incompatible changes, adding a field is safe
 public class Blockchain implements Serializable {
@@ -34,6 +36,9 @@ public class Blockchain implements Serializable {
         if (!tx.hasValidSignature()) {
             throw new IllegalArgumentException("Transaction signature is invalid.");
         }
+        if (hasTransaction(tx.id())) {
+            throw new IllegalArgumentException("Transaction " + tx.id() + " was already submitted.");
+        }
         if (!Transaction.NETWORK.equals(tx.from())) {
             PublicKey known = knownKeys.get(tx.from());
             if (known == null) {
@@ -55,6 +60,19 @@ public class Blockchain implements Serializable {
             throw new IllegalArgumentException(tx.from() + " doesn't have enough coins.");
         }
         pending.add(tx);
+    }
+
+    // A transaction id may only be used once, whether it's still waiting or already mined.
+    private boolean hasTransaction(String id) {
+        for (Transaction tx : pending) {
+            if (tx.id().equals(id)) return true;
+        }
+        for (Block block : chain) {
+            for (Transaction tx : block.getTransactions()) {
+                if (tx.id().equals(id)) return true;
+            }
+        }
+        return false;
     }
 
     public Block minePending(String miner) {
@@ -93,6 +111,7 @@ public class Blockchain implements Serializable {
     public boolean isValid() {
         String target = "0".repeat(difficulty);
         Map<String, PublicKey> keys = new HashMap<>();
+        Set<String> ids = new HashSet<>();
         for (int i = 1; i < chain.size(); i++) {
             Block block = chain.get(i);
             Block previous = chain.get(i - 1);
@@ -101,6 +120,7 @@ public class Blockchain implements Serializable {
             if (!block.getHash().startsWith(target)) return false;
             for (Transaction tx : block.getTransactions()) {
                 if (!tx.hasValidSignature()) return false;
+                if (!ids.add(tx.id())) return false;
                 if (!Transaction.NETWORK.equals(tx.from())) {
                     PublicKey known = keys.get(tx.from());
                     if (known == null) {
