@@ -43,7 +43,7 @@ The chain is kept in a file called `chain.dat` in the project folder.
 - Starting the program loads that file, including payments that are still waiting to be mined.
 - A chain that fails the validity check is never written, so the file always holds the last chain that passed. Tamper with a block, quit, and the next run loads the untampered chain.
 - The file is a Java serialized object, so it's binary and you can't read it in a text editor.
-- It is tied to the `Block` and `Transaction` classes. Change either one and the file stops loading, and the program starts a new chain instead.
+- It is tied to the `Block` and `Transaction` classes. Adding a field or a method still loads, but a change that Java serialization treats as incompatible (for example changing a field's type, or bumping `serialVersionUID` in `Block`) makes the file stop loading, and the program starts a new chain instead.
 - Deleting `chain.dat` starts you over.
 
 ## Code
