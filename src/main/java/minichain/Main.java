@@ -10,23 +10,29 @@ import java.util.Scanner;
 /** Menu for trying out the chain from the terminal. */
 public class Main {
     private static final Path SAVE_FILE = Path.of("chain.dat");
+    private static final Path WALLETS_FILE = Path.of("wallets.dat");
 
-    private static final Map<String, KeyPair> wallets = new HashMap<>();
+    private static Map<String, KeyPair> wallets = new HashMap<>();
 
-    private static KeyPair getWallet(String name) {
-        return wallets.computeIfAbsent(name, k -> {
+    static KeyPair getWallet(String name) {
+        KeyPair wallet = wallets.get(name);
+        if (wallet == null) {
             try {
                 KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
                 generator.initialize(1024);
-                return generator.generateKeyPair();
+                wallet = generator.generateKeyPair();
+                wallets.put(name, wallet);
+                Storage.saveWallets(wallets, WALLETS_FILE);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-        });
+        }
+        return wallet;
     }
 
     public static void main(String[] args) {
         Blockchain chain = Storage.load(SAVE_FILE, 4);
+        wallets = Storage.loadWallets(WALLETS_FILE);
         Scanner in = new Scanner(System.in);
         System.out.println("mini-chain. Mine a block first to get some coins.");
 
@@ -44,6 +50,7 @@ public class Main {
             System.out.print("> ");
             if (!in.hasNextLine()) {
                 Storage.save(chain, SAVE_FILE);
+                Storage.saveWallets(wallets, WALLETS_FILE);
                 return;
             }
             String choice = in.nextLine().trim();
@@ -63,6 +70,7 @@ public class Main {
                         Block block = chain.minePending(miner);
                         System.out.println("Mined block " + block.getIndex() + " after " + block.getNonce() + " tries: " + block.getHash());
                         Storage.save(chain, SAVE_FILE);
+                        Storage.saveWallets(wallets, WALLETS_FILE);
                     }
                     case "3" -> {
                         for (Block block : chain.getChain()) {
@@ -95,7 +103,11 @@ public class Main {
                         block.mine(chain.getDifficulty());
                         System.out.println("Hash fixed! Now use option 6 to see if the Digital Signatures catch it!");
                     }
-                    case "8" -> { Storage.save(chain, SAVE_FILE); return; }
+                    case "8" -> {
+                        Storage.save(chain, SAVE_FILE);
+                        Storage.saveWallets(wallets, WALLETS_FILE);
+                        return;
+                    }
                     default -> System.out.println("Please pick 1-8.");
                 }
             } catch (NumberFormatException e) {

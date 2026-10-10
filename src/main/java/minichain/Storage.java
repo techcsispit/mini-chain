@@ -7,7 +7,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-/** Saves the chain to a file and reads it back, so it survives a restart. */
+import java.security.KeyPair;
+import java.util.HashMap;
+import java.util.Map;
+
+/** Saves the chain and wallets to files and reads them back, so they survive a restart. */
 final class Storage {
     private Storage() {}
 
@@ -44,6 +48,32 @@ final class Storage {
         } catch (IOException | ClassNotFoundException | ClassCastException e) {
             System.out.println("Couldn't read " + file + " (" + e.getClass().getSimpleName() + "), so a new chain was started.");
             return new Blockchain(difficulty);
+        }
+    }
+
+    static void saveWallets(Map<String, KeyPair> wallets, Path file) {
+        Path temp = file.resolveSibling(file.getFileName() + ".tmp");
+        try (ObjectOutputStream out = new ObjectOutputStream(Files.newOutputStream(temp))) {
+            out.writeObject(wallets);
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            System.out.println("Saved " + file + ".");
+        } catch (IOException e) {
+            System.out.println("Couldn't save wallets: " + e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    static Map<String, KeyPair> loadWallets(Path file) {
+        if (Files.notExists(file)) {
+            return new HashMap<>();
+        }
+        try (ObjectInputStream in = new ObjectInputStream(Files.newInputStream(file))) {
+            Map<String, KeyPair> wallets = (Map<String, KeyPair>) in.readObject();
+            System.out.println("Loaded " + file + ".");
+            return wallets != null ? new HashMap<>(wallets) : new HashMap<>();
+        } catch (IOException | ClassNotFoundException | ClassCastException e) {
+            System.out.println("Couldn't read " + file + " (" + e.getClass().getSimpleName() + "), so empty wallets were started.");
+            return new HashMap<>();
         }
     }
 }

@@ -11,6 +11,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.util.HashMap;
+import java.util.Map;
 
 class BlockchainTest {
 
@@ -237,5 +239,90 @@ class BlockchainTest {
         assertThrows(IllegalArgumentException.class, () -> 
             chain.addTransaction(Transaction.create("asha", "ravi", 10, hackerWallet.getPrivate(), hackerWallet.getPublic()))
         );
+    }
+
+    @Test
+    void savedWalletsReload(@TempDir Path dir) {
+        Path file = dir.resolve("wallets.dat");
+        Map<String, KeyPair> wallets = new HashMap<>();
+        KeyPair ashaWallet = getWallet();
+        wallets.put("asha", ashaWallet);
+        Storage.saveWallets(wallets, file);
+
+        Map<String, KeyPair> loaded = Storage.loadWallets(file);
+        assertEquals(1, loaded.size());
+        assertTrue(loaded.containsKey("asha"));
+        assertEquals(ashaWallet.getPublic(), loaded.get("asha").getPublic());
+        assertEquals(ashaWallet.getPrivate(), loaded.get("asha").getPrivate());
+    }
+
+    @Test
+    void missingOrUnreadableWalletsFileStartsEmpty(@TempDir Path dir) throws IOException {
+        Path file = dir.resolve("wallets.dat");
+        Map<String, KeyPair> fresh = Storage.loadWallets(file);
+        assertTrue(fresh.isEmpty());
+
+        Files.writeString(file, "corrupted data");
+        Map<String, KeyPair> afterGarbage = Storage.loadWallets(file);
+        assertTrue(afterGarbage.isEmpty());
+    }
+
+    @Test
+    void reloadedWalletCanSpendAcrossSimulatedRestart(@TempDir Path dir) {
+        Path chainFile = dir.resolve("chain.dat");
+        Path walletsFile = dir.resolve("wallets.dat");
+
+        Blockchain chain = new Blockchain(2);
+        chain.minePending("asha");
+
+        Map<String, KeyPair> wallets = new HashMap<>();
+        KeyPair ashaWallet = getWallet();
+        wallets.put("asha", ashaWallet);
+        Storage.saveWallets(wallets, walletsFile);
+
+        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        chain.minePending("miner");
+        Storage.save(chain, chainFile);
+
+        // --- Simulated App Restart ---
+        Blockchain loadedChain = Storage.load(chainFile, 2);
+        Map<String, KeyPair> loadedWallets = Storage.loadWallets(walletsFile);
+
+        assertEquals(30, loadedChain.balanceOf("asha"));
+        KeyPair loadedAshaWallet = loadedWallets.get("asha");
+        assertNotNull(loadedAshaWallet);
+
+        assertDoesNotThrow(() -> {
+            loadedChain.addTransaction(Transaction.create("asha", "ravi", 10,
+                loadedAshaWallet.getPrivate(), loadedAshaWallet.getPublic()));
+        });
+
+        loadedChain.minePending("miner");
+        assertEquals(20, loadedChain.balanceOf("asha"));
+        assertEquals(30, loadedChain.balanceOf("ravi"));
+        assertTrue(loadedChain.isValid());
+    }
+
+    @Test
+    void unpersistedWalletMismatchFailsAcrossRestart(@TempDir Path dir) {
+        Path chainFile = dir.resolve("chain.dat");
+
+        Blockchain chain = new Blockchain(2);
+        chain.minePending("asha");
+
+        KeyPair ashaWallet = getWallet();
+        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        chain.minePending("miner");
+        Storage.save(chain, chainFile);
+
+        // --- Simulated App Restart without persisting wallet ---
+        Blockchain loadedChain = Storage.load(chainFile, 2);
+        KeyPair freshKeyForAsha = getWallet();
+
+        IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class, () ->
+            loadedChain.addTransaction(Transaction.create("asha", "ravi", 10,
+                freshKeyForAsha.getPrivate(), freshKeyForAsha.getPublic()))
+        );
+        assertEquals("Transaction uses a different key than the registered key for sender: asha", thrown.getMessage());
     }
 }

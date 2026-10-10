@@ -13,7 +13,7 @@ mvn test
 
 Try mining a block, tampering with it (option 7), then checking if the chain is valid (option 6).
 
-Run it again and it picks up where you left off. The chain is saved to a file called `chain.dat` in the project folder, delete that file to start over.
+Run it again and it picks up where you left off. The chain is saved to `chain.dat` and wallets to `wallets.dat` in the project folder; delete those files to start over.
 
 ## The idea
 
@@ -37,14 +37,14 @@ Validation
 
 ## Saving
 
-The chain is kept in a file called `chain.dat` in the project folder.
+The chain is kept in `chain.dat` and user wallets in `wallets.dat` in the project folder.
 
-- The file is written every time you mine a block, and again when you quit.
-- Starting the program loads that file, including payments that are still waiting to be mined.
+- The files are written every time you mine a block, and again when you quit (wallets are also saved when a new key is generated).
+- Starting the program loads those files, including payments that are still waiting to be mined and registered user keys.
 - A chain that fails the validity check is never written, so the file always holds the last chain that passed. Tamper with a block, quit, and the next run loads the untampered chain.
-- The file is a Java serialized object, so it's binary and you can't read it in a text editor.
+- The files are Java serialized objects, so they are binary and you can't read them in a text editor.
 - It is tied to the `Block` and `Transaction` classes. Change either one and the file stops loading, and the program starts a new chain instead.
-- Deleting `chain.dat` starts you over.
+- Deleting `chain.dat` and `wallets.dat` starts you over.
 
 ## Code
 
@@ -53,7 +53,7 @@ All in `src/main/java/minichain/`:
 - `Transaction.java`: a payment
 - `Block.java`: hashing and mining
 - `Blockchain.java`: payments, balances, validation
-- `Storage.java`: saving and loading the chain
+- `Storage.java`: saving and loading the chain and wallets
 - `Main.java`: the menu
 
 Tests are in `src/test/java/minichain/`.

@@ -3,6 +3,7 @@ target/
 *.class
 *.jar
 chain.dat
+wallets.dat
 
 # Editors and AI assistants
 .vscode/
