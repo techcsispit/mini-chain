@@ -258,4 +258,12 @@ class BlockchainTest {
 
         assertTrue(signed.hasValidSignature());
     }
+
+    @Test
+    void signatureCannotBeReusedWhenNamesContainSeparators() {
+        KeyPair wallet = getWallet();
+        Transaction signed = Transaction.create("asha", "x|y", 5, wallet.getPrivate(), wallet.getPublic());
+        Transaction shifted = new Transaction(signed.id(), "asha|x", "y", 5, signed.senderKey(), signed.signature());
+        assertFalse(shifted.hasValidSignature());
+    }
 }
