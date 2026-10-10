@@ -1,7 +1,9 @@
 package minichain;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.io.Serializable;
-import java.nio.charset.StandardCharsets;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.Signature;
@@ -25,7 +27,7 @@ public record Transaction(String id, String from, String to, int amount, PublicK
             String id = UUID.randomUUID().toString();
             Signature rsa = Signature.getInstance("SHA256withRSA");
             rsa.initSign(priv);
-            rsa.update((id + from + to + amount).getBytes(StandardCharsets.UTF_8));
+            rsa.update(signedBytes(id, from, to, amount));
             byte[] sig = rsa.sign();
             return new Transaction(id, from, to, amount, pub, sig);
         } catch (Exception e) {
@@ -39,11 +41,23 @@ public record Transaction(String id, String from, String to, int amount, PublicK
         try {
             Signature rsa = Signature.getInstance("SHA256withRSA");
             rsa.initVerify(senderKey);
-            rsa.update((id + from + to + amount).getBytes(StandardCharsets.UTF_8));
+            rsa.update(signedBytes(id, from, to, amount));
             return rsa.verify(signature);
         } catch (Exception e) {
             return false;
         }
+    }
+
+    // Each text field is written with its length in front, so the bytes can't be
+    // re-split into a different sender, payee or amount.
+    private static byte[] signedBytes(String id, String from, String to, int amount) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        DataOutputStream out = new DataOutputStream(bytes);
+        out.writeUTF(id);
+        out.writeUTF(from);
+        out.writeUTF(to);
+        out.writeInt(amount);
+        return bytes.toByteArray();
     }
 
     @Override
