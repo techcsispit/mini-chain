@@ -338,25 +338,25 @@ class BlockchainTest {
         String root0 = Block.computeMerkleRoot(List.of());
         assertEquals(Block.sha256(""), root0);
 
-        // 1 transaction: root is sha256(tx.toString())
+        // 1 transaction: root is tx1.hash()
         KeyPair w1 = getWallet();
         Transaction tx1 = Transaction.create("asha", "ravi", 10, w1.getPrivate(), w1.getPublic());
         String root1 = Block.computeMerkleRoot(List.of(tx1));
-        assertEquals(Block.sha256(tx1.toString()), root1);
+        assertEquals(tx1.hash(), root1);
 
         // 2 transactions: sha256(h1 + h2)
         KeyPair w2 = getWallet();
         Transaction tx2 = Transaction.create("ravi", "meera", 20, w2.getPrivate(), w2.getPublic());
         String root2 = Block.computeMerkleRoot(List.of(tx1, tx2));
-        assertEquals(Block.sha256(Block.sha256(tx1.toString()) + Block.sha256(tx2.toString())), root2);
+        assertEquals(Block.sha256(tx1.hash() + tx2.hash()), root2);
 
         // 3 transactions: odd duplication for tx3 -> sha256(sha256(h1 + h2) + sha256(h3 + h3))
         KeyPair w3 = getWallet();
         Transaction tx3 = Transaction.create("meera", "asha", 30, w3.getPrivate(), w3.getPublic());
         String root3 = Block.computeMerkleRoot(List.of(tx1, tx2, tx3));
         String expected3 = Block.sha256(
-            Block.sha256(Block.sha256(tx1.toString()) + Block.sha256(tx2.toString())) +
-            Block.sha256(Block.sha256(tx3.toString()) + Block.sha256(tx3.toString()))
+            Block.sha256(tx1.hash() + tx2.hash()) +
+            Block.sha256(tx3.hash() + tx3.hash())
         );
         assertEquals(expected3, root3);
     }
@@ -389,5 +389,99 @@ class BlockchainTest {
         block.tamperMerkleRoot("0".repeat(64));
 
         assertFalse(chain.isValid());
+    }
+
+    // ==========================================
+    // Tests for Transaction Hashing (Issue #29)
+    // ==========================================
+
+    @Test
+    void transactionHashIsDeterministicAndHex64() {
+        KeyPair wallet = getWallet();
+        Transaction tx = Transaction.create("asha", "ravi", 25, wallet.getPrivate(), wallet.getPublic());
+
+        String hash1 = tx.hash();
+        String hash2 = tx.hash();
+
+        assertNotNull(hash1);
+        assertEquals(64, hash1.length());
+        assertTrue(hash1.matches("^[0-9a-f]{64}$"), "Hash must be a 64-character lowercase hexadecimal string");
+        assertEquals(hash1, hash2, "Repeated calls to hash() must be deterministic");
+    }
+
+    @Test
+    void modifyingAnyTransactionFieldChangesHash() {
+        KeyPair wallet = getWallet();
+        KeyPair otherWallet = getWallet();
+        Transaction base = Transaction.create("asha", "ravi", 25, wallet.getPrivate(), wallet.getPublic());
+        String baseHash = base.hash();
+
+        // Modifying ID
+        Transaction diffId = new Transaction("custom-id-" + System.nanoTime(), base.from(), base.to(), base.amount(), base.senderKey(), base.signature());
+        assertNotEquals(baseHash, diffId.hash(), "Altering ID must change hash");
+
+        // Modifying from
+        Transaction diffFrom = new Transaction(base.id(), "asha-modified", base.to(), base.amount(), base.senderKey(), base.signature());
+        assertNotEquals(baseHash, diffFrom.hash(), "Altering from must change hash");
+
+        // Modifying to
+        Transaction diffTo = new Transaction(base.id(), base.from(), "ravi-modified", base.amount(), base.senderKey(), base.signature());
+        assertNotEquals(baseHash, diffTo.hash(), "Altering to must change hash");
+
+        // Modifying amount
+        Transaction diffAmount = new Transaction(base.id(), base.from(), base.to(), base.amount() + 10, base.senderKey(), base.signature());
+        assertNotEquals(baseHash, diffAmount.hash(), "Altering amount must change hash");
+
+        // Modifying senderKey
+        Transaction diffSenderKey = new Transaction(base.id(), base.from(), base.to(), base.amount(), otherWallet.getPublic(), base.signature());
+        assertNotEquals(baseHash, diffSenderKey.hash(), "Altering senderKey must change hash");
+
+        Transaction nullSenderKey = new Transaction(base.id(), base.from(), base.to(), base.amount(), null, base.signature());
+        assertNotEquals(baseHash, nullSenderKey.hash(), "Null senderKey must produce different hash than present key");
+
+        // Modifying signature
+        byte[] alteredSig = base.signature().clone();
+        alteredSig[0] ^= 0xFF;
+        Transaction diffSig = new Transaction(base.id(), base.from(), base.to(), base.amount(), base.senderKey(), alteredSig);
+        assertNotEquals(baseHash, diffSig.hash(), "Altering signature bytes must change hash");
+
+        Transaction nullSig = new Transaction(base.id(), base.from(), base.to(), base.amount(), base.senderKey(), null);
+        assertNotEquals(baseHash, nullSig.hash(), "Null signature must produce different hash than present signature");
+    }
+
+    @Test
+    void unsignedRewardTransactionHashesDeterministically() {
+        Transaction rewardTx = new Transaction(Transaction.NETWORK, "asha", 50);
+        assertNull(rewardTx.senderKey());
+        assertNull(rewardTx.signature());
+
+        String hash1 = rewardTx.hash();
+        String hash2 = rewardTx.hash();
+
+        assertEquals(64, hash1.length());
+        assertTrue(hash1.matches("^[0-9a-f]{64}$"));
+        assertEquals(hash1, hash2);
+    }
+
+    @Test
+    void modifyingTransactionSecurityFieldsInvalidatesMerkleRoot() {
+        KeyPair wallet = getWallet();
+        KeyPair otherWallet = getWallet();
+        Transaction original = Transaction.create("asha", "ravi", 25, wallet.getPrivate(), wallet.getPublic());
+        String originalRoot = Block.computeMerkleRoot(List.of(original));
+
+        // Altering id changes Merkle root
+        Transaction tamperedId = new Transaction("alt-id", original.from(), original.to(), original.amount(), original.senderKey(), original.signature());
+        assertNotEquals(originalRoot, Block.computeMerkleRoot(List.of(tamperedId)));
+
+        // Altering senderKey changes Merkle root
+        Transaction tamperedKey = new Transaction(original.id(), original.from(), original.to(), original.amount(), otherWallet.getPublic(), original.signature());
+        assertNotEquals(originalRoot, Block.computeMerkleRoot(List.of(tamperedKey)));
+
+        // Altering signature changes Merkle root
+        byte[] tamperedSig = original.signature().clone();
+        tamperedSig[0] ^= 0xFF;
+        Transaction tamperedSignature = new Transaction(original.id(), original.from(), original.to(), original.amount(), original.senderKey(), tamperedSig);
+        assertNotEquals(originalRoot, Block.computeMerkleRoot(List.of(tamperedSignature)));
     }
 }

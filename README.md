@@ -43,7 +43,7 @@ The chain is kept in `chain.dat` and user wallets in `wallets.dat` in the projec
 - Starting the program loads those files, including payments that are still waiting to be mined and registered user keys.
 - A chain that fails the validity check is never written, so the file always holds the last chain that passed. Tamper with a block, quit, and the next run loads the untampered chain.
 - The files are Java serialized objects, so they are binary and you can't read them in a text editor.
-- It is tied to the `Block` and `Transaction` classes. Change either one and the file stops loading, and the program starts a new chain instead (e.g. `Block`'s `serialVersionUID` was bumped to `3L` for `merkleRoot`, so chains saved with `2L` start fresh).
+- It is tied to the `Block` and `Transaction` classes. Change either one and the file stops loading, and the program starts a new chain instead (e.g. `Block`'s `serialVersionUID` was bumped to `4L` for transaction hashing in `merkleRoot`, so chains saved with `3L` start fresh).
 - Deleting `chain.dat` and `wallets.dat` starts you over.
 
 ## Code

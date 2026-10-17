@@ -1,10 +1,14 @@
 package minichain;
 
 import java.io.Serializable;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.Signature;
+import java.util.HexFormat;
 import java.util.UUID;
 import java.util.Base64;
 
@@ -43,6 +47,31 @@ public record Transaction(String id, String from, String to, int amount, PublicK
             return rsa.verify(signature);
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    public String hash() {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            if (id != null) {
+                digest.update(id.getBytes(StandardCharsets.UTF_8));
+            }
+            if (from != null) {
+                digest.update(from.getBytes(StandardCharsets.UTF_8));
+            }
+            if (to != null) {
+                digest.update(to.getBytes(StandardCharsets.UTF_8));
+            }
+            digest.update(ByteBuffer.allocate(4).putInt(amount).array());
+            if (senderKey != null) {
+                digest.update(senderKey.getEncoded());
+            }
+            if (signature != null) {
+                digest.update(signature);
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
     }
 
