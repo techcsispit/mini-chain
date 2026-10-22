@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -660,6 +661,60 @@ class BlockchainTest {
         block.mine(chain.getDifficulty());
 
         // isValid must reject multiple network rewards in a single block
+        assertFalse(chain.isValid());
+    }
+
+    @Test
+    void transactionWithInsufficientBalanceInMinedBlockFailsValidation() {
+        Blockchain chain = new Blockchain(2);
+        KeyPair aliceWallet = getWallet();
+        String aliceAddress = Blockchain.deriveAddress(aliceWallet.getPublic());
+        KeyPair bobWallet = getWallet();
+        String bobAddress = Blockchain.deriveAddress(bobWallet.getPublic());
+
+        // Alice has 0 balance, but signs a transaction to transfer 50 coins to Bob
+        Transaction overdraftTx = Transaction.create(aliceAddress, bobAddress, 50, aliceWallet.getPrivate(), aliceWallet.getPublic());
+
+        // A malicious or external block includes this overdraft transaction directly
+        List<Transaction> txs = new ArrayList<>();
+        txs.add(overdraftTx);
+        txs.add(new Transaction(Transaction.NETWORK, "miner", Blockchain.MINING_REWARD));
+
+        Block block = new Block(chain.getChain().size(), System.currentTimeMillis(), txs, chain.latestBlock().getHash());
+        block.mine(chain.getDifficulty());
+        chain.getChain().add(block);
+
+        // Transaction signature and proof-of-work are valid, but Alice had insufficient balance
+        assertFalse(chain.isValid());
+    }
+
+    @Test
+    void consecutiveOverdraftInSameBlockFailsValidation() {
+        Blockchain chain = new Blockchain(2);
+        KeyPair aliceWallet = getWallet();
+        String aliceAddress = Blockchain.deriveAddress(aliceWallet.getPublic());
+        KeyPair bobWallet = getWallet();
+        String bobAddress = Blockchain.deriveAddress(bobWallet.getPublic());
+
+        // Alice receives 50 coins via mining reward
+        chain.minePending(aliceAddress);
+        assertEquals(50, chain.balanceOf(aliceAddress));
+        assertTrue(chain.isValid());
+
+        // Alice creates two legitimate 30-coin transactions (total 60 coins > 50 balance)
+        Transaction tx1 = Transaction.create(aliceAddress, bobAddress, 30, aliceWallet.getPrivate(), aliceWallet.getPublic());
+        Transaction tx2 = Transaction.create(aliceAddress, bobAddress, 30, aliceWallet.getPrivate(), aliceWallet.getPublic());
+
+        List<Transaction> txs = new ArrayList<>();
+        txs.add(tx1);
+        txs.add(tx2);
+        txs.add(new Transaction(Transaction.NETWORK, "miner", Blockchain.MINING_REWARD));
+
+        Block block = new Block(chain.getChain().size(), System.currentTimeMillis(), txs, chain.latestBlock().getHash());
+        block.mine(chain.getDifficulty());
+        chain.getChain().add(block);
+
+        // isValid must reject the block because the second transaction overspends Alice's balance
         assertFalse(chain.isValid());
     }
 }
