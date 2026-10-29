@@ -122,6 +122,7 @@ public class Blockchain implements Serializable {
         String target = "0".repeat(difficulty);
         Map<String, PublicKey> keys = new HashMap<>();
         Set<String> seenTxIds = new HashSet<>();
+        Map<String, Integer> runningBalances = new HashMap<>();
         for (int i = 1; i < chain.size(); i++) {
             Block block = chain.get(i);
             Block previous = chain.get(i - 1);
@@ -138,6 +139,7 @@ public class Blockchain implements Serializable {
                     if (networkRewardCount > 1 || tx.amount() != MINING_REWARD) {
                         return false;
                     }
+                    runningBalances.merge(tx.to(), tx.amount(), Integer::sum);
                 } else {
                     if (tx.senderKey() == null || !deriveAddress(tx.senderKey()).equals(tx.from())) return false;
                     PublicKey known = keys.get(tx.from());
@@ -146,6 +148,12 @@ public class Blockchain implements Serializable {
                     } else if (!known.equals(tx.senderKey())) {
                         return false;
                     }
+                    int senderBalance = runningBalances.getOrDefault(tx.from(), 0);
+                    if (senderBalance < tx.amount()) {
+                        return false;
+                    }
+                    runningBalances.put(tx.from(), senderBalance - tx.amount());
+                    runningBalances.merge(tx.to(), tx.amount(), Integer::sum);
                 }
             }
         }
